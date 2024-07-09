@@ -10,15 +10,14 @@ impl UrlMatcher {
     /// 
     /// * If the regex pattern is invalid
     pub fn new() -> Self {
-        Self(Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%\-]+").expect("pattern should be valid"))
+        Self(Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-]+").expect("pattern should be valid"))
     }
 
     /// Extracts all the URLs from `haystack`.
     #[must_use]
     pub fn urls<'h>(&self, haystack: &'h str) -> Vec<&'h str> {
         self.0.find_iter(haystack)
-            .map(|m| m.as_str())
-            .collect()
+            .map(|m| m.as_str()).collect()
     }
 }
 
@@ -84,6 +83,18 @@ mod tests {
                 input: "Test link: [local test server](http://127.0.0.1:63151/)",
                 want: vec![
                     "http://127.0.0.1:63151/",
+                ],
+            },
+            Case {
+                input: "With all due respect to Descartes, he had it backwards. The fact that “I” am thinking indicates only that *there are thoughts*. The “I” who is supposedly in charge of them is a psychologically convenient fiction, no more. Or, as the poet Emily Dickinson put it, [“I'm nobody! Who are you?”](https://en.wikipedia.org/wiki/I%27m_Nobody!_Who_are_you%3F)",
+                want: vec![
+                    "https://en.wikipedia.org/wiki/I%27m_Nobody!_Who_are_you%3F",
+                ],
+            },
+            Case {
+                input: "—Stephen Hough, [“Problems Playing the Piano?”](https://web.archive.org/web/20210210210510/http://www.stephenhough.com/writings/selective/problems-playing-piano.php)",
+                want: vec![
+                    "https://web.archive.org/web/20210210210510/http://www.stephenhough.com/writings/selective/problems-playing-piano.php",
                 ],
             },
         ];

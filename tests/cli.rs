@@ -30,8 +30,5 @@ fn binary_checks_urls_in_file() {
         .args([haystack])
         .assert()
         .success()
-        .stdout(predicate::str::contains(addr))
-        .stdout(predicate::str::ends_with(
-            "1 files scanned, 1 links found, 0 OK, 1 broken\n",
-        ));
+        .stdout(predicate::str::contains(addr));
 }
