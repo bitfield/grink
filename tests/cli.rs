@@ -1,5 +1,8 @@
+use std::{fs, net::TcpListener};
+
 use assert_cmd::Command;
 use predicates::prelude::*;
+use tempfile::TempDir;
 
 #[test]
 fn binary_with_no_args_prints_usage() {
@@ -11,19 +14,24 @@ fn binary_with_no_args_prints_usage() {
 }
 
 #[test]
-fn binary_with_path_finds_urls_in_file() {
+fn binary_checks_urls_in_file() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    drop(listener); // this port is now not listening
+    let tmp = TempDir::new().unwrap();
+    let haystack = tmp.path().with_file_name("haystack.md");
+    fs::write(
+        &haystack,
+        format!("Test link: [local test server](http://{addr}/)"),
+    )
+    .unwrap();
     Command::cargo_bin("grink")
         .unwrap()
-        .args(["-n", "tests/data/haystack.md"])
+        .args([haystack])
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "https://www.youtube.com/watch?v=GmqeZl8OI2M",
-        ))
-        .stdout(predicate::str::contains(
-            "https://slate.com/technology/2019/10/hello-world-history-programming.html",
-        ))
-        .stdout(predicate::str::contains(
-            "https://web.archive.org/web/20210210210510/http://www.stephenhough.com/writings/selective/problems-playing-piano.php",
+        .stdout(predicate::str::contains(addr))
+        .stdout(predicate::str::ends_with(
+            "1 files scanned, 1 links found, 0 OK, 1 broken\n",
         ));
 }

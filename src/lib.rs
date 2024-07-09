@@ -10,7 +10,7 @@ impl UrlMatcher {
     /// 
     /// * If the regex pattern is invalid
     pub fn new() -> Self {
-        Self(Regex::new(r"https?:\/\/[\w\d./?=#-]+").expect("pattern should be valid"))
+        Self(Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%\-]+").expect("pattern should be valid"))
     }
 
     /// Extracts all the URLs from `haystack`.
@@ -18,7 +18,7 @@ impl UrlMatcher {
     pub fn urls<'h>(&self, haystack: &'h str) -> Vec<&'h str> {
         self.0.find_iter(haystack)
             .map(|m| m.as_str())
-            .collect::<Vec<_>>()
+            .collect()
     }
 }
 
@@ -72,6 +72,18 @@ mod tests {
                     " —[“Saturday Night Live”](https://www.youtube.com/watch?v=GmqeZl8OI2M)",
                 want: vec![
                     "https://www.youtube.com/watch?v=GmqeZl8OI2M",
+                ],
+            },
+            Case {
+                input: "> —Andreas Klinger, [“Managing People”](https://klinger.io/posts/managing-people-%F0%9F%A4%AF)",
+                want: vec![
+                    "https://klinger.io/posts/managing-people-%F0%9F%A4%AF",
+                ],
+            },
+            Case {
+                input: "Test link: [local test server](http://127.0.0.1:63151/)",
+                want: vec![
+                    "http://127.0.0.1:63151/",
                 ],
             },
         ];
