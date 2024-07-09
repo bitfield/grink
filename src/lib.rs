@@ -5,19 +5,21 @@ pub struct UrlMatcher(Regex);
 impl UrlMatcher {
     #[must_use]
     /// Constructs a new `UrlMatcher`.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// * If the regex pattern is invalid
     pub fn new() -> Self {
-        Self(Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-]+").expect("pattern should be valid"))
+        Self(
+            Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-]+")
+                .expect("pattern should be valid"),
+        )
     }
 
     /// Extracts all the URLs from `haystack`.
     #[must_use]
     pub fn urls<'h>(&self, haystack: &'h str) -> Vec<&'h str> {
-        self.0.find_iter(haystack)
-            .map(|m| m.as_str()).collect()
+        self.0.find_iter(haystack).map(|m| m.as_str()).collect()
     }
 }
 
@@ -44,12 +46,12 @@ mod tests {
                     "https://amzn.to/3uzcGE0"
                 ],
             },
-            Case { 
-                input: "([Listing hello/3](https://github.com/bitfield/tpg-tools2/blob/main/hello/3/cmd/hello/main.go))", 
+            Case {
+                input: "([Listing hello/3](https://github.com/bitfield/tpg-tools2/blob/main/hello/3/cmd/hello/main.go))",
                 want: vec![
                     "https://github.com/bitfield/tpg-tools2/blob/main/hello/3/cmd/hello/main.go"
-                ] 
-            }, 
+                ]
+            },
             Case {
                 input:
                     "* [https://github.com/bitfield/gotestdox](https://github.com/bitfield/gotestdox)",

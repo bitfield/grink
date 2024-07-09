@@ -1,9 +1,23 @@
 [package]
 name = "grink"
 version = "0.1.0"
+authors = ["John Arundel <john@bitfieldconsulting.com>"]
 edition = "2021"
+description = """
+Grink is a tool to find and check web links in text files.
+"""
+keywords = ["web", "cli", "utility", "text"]
+categories = ["command-line-utilities"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+documentation = "https://docs.rs/grink"
+homepage = "https://github.com/bitfield/grink"
+repository = "https://github.com/bitfield/grink"
+exclude = ["/.github/"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[badges]
+github = { repository = "bitfield/grink", workflow = "CI" }
+maintenance = { status = "actively-developed" }
 
 [dependencies]
 anyhow = "1.0.86"

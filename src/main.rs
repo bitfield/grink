@@ -24,8 +24,10 @@ fn main() -> anyhow::Result<(), Error> {
             let file = BufReader::new(File::open(path).context(format!("reading {path}"))?);
             for line_res in file.lines() {
                 let line = line_res?;
-                matcher.urls(&line).par_iter().for_each(|url| {
-                    match http.get(*url).send() {
+                matcher
+                    .urls(&line)
+                    .par_iter()
+                    .for_each(|url| match http.get(*url).send() {
                         Err(e) => {
                             println!("{path}: {e}");
                         }
@@ -34,8 +36,7 @@ fn main() -> anyhow::Result<(), Error> {
                                 println!("{path}: {e}");
                             }
                         }
-                    }
-                });
+                    });
             }
             anyhow::Ok(())
         })
