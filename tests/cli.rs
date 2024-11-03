@@ -19,7 +19,7 @@ fn binary_checks_urls_in_file() {
     let addr = listener.local_addr().unwrap().to_string();
     drop(listener); // this port is now not listening
     let tmp = TempDir::new().unwrap();
-    let haystack = tmp.path().with_file_name("haystack.md");
+    let haystack = tmp.path().join("haystack.md");
     fs::write(
         &haystack,
         format!("Test link: [local test server](http://{addr}/)"),
