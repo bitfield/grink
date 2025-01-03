@@ -1,4 +1,11 @@
+use anyhow::Result;
 use regex::Regex;
+
+use std::path::PathBuf;
+
+pub fn scan(paths: &[PathBuf]) -> Result<Vec<String>> {
+    Ok(Vec::new())
+}
 
 pub struct UrlMatcher(Regex);
 
