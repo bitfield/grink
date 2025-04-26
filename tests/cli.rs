@@ -9,7 +9,7 @@ fn binary_with_no_args_prints_usage() {
     Command::cargo_bin("grink")
         .unwrap()
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("Usage"));
 }
 

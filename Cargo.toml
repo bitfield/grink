@@ -22,9 +22,9 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 anyhow = "1.0.86"
 clap = { version = "4.5.23", features = ["derive"] }
-rayon = "1.10.0"
 regex = "1.10.5"
-reqwest = { version = "0.12.5", features = ["blocking"] }
+reqwest = "0.12.5"
+tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.14"

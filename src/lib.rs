@@ -1,11 +1,7 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use regex::Regex;
 
-use std::path::PathBuf;
-
-pub fn scan(paths: &[PathBuf]) -> Result<Vec<String>> {
-    Ok(Vec::new())
-}
+use std::{fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
 pub struct UrlMatcher(Regex);
 
@@ -34,6 +30,34 @@ impl Default for UrlMatcher {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// # Errors
+pub async fn scan(paths: &[PathBuf]) -> Result<Vec<String>> {
+    let matcher = UrlMatcher::new();
+    let http = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        .build()?;
+    let mut failures = Vec::new();
+    for path in paths {
+            let file = BufReader::new(File::open(path).context(format!("reading {}", path.display()))?);
+            for line_res in file.lines() {
+                let line = line_res?;
+                for url in matcher.urls(&line) {
+                    match http.get(url).send().await {
+                        Err(e) => {
+                             failures.push(format!("{}: {e:?}", path.display()));
+                        }
+                        Ok(resp) => {
+                            if let Err(e) = resp.error_for_status() {
+                                failures.push(format!("{}: {e:?}", path.display()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(failures)
 }
 
 #[cfg(test)]
