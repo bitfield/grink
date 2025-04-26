@@ -24,7 +24,7 @@ anyhow = "1.0.86"
 clap = { version = "4.5.23", features = ["derive"] }
 regex = "1.10.5"
 reqwest = "0.12.5"
-tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.44.2", features = ["fs", "macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.14"

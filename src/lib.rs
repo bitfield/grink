@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use regex::Regex;
+use tokio::fs;
 
-use std::{fs::File, io::{BufRead, BufReader}, path::PathBuf};
+use std::path::PathBuf;
 
 pub struct UrlMatcher(Regex);
 
@@ -40,24 +41,24 @@ pub async fn scan(paths: &[PathBuf]) -> Result<Vec<String>> {
         .build()?;
     let mut failures = Vec::new();
     for path in paths {
-            let file = BufReader::new(File::open(path).context(format!("reading {}", path.display()))?);
-            for line_res in file.lines() {
-                let line = line_res?;
-                for url in matcher.urls(&line) {
-                    match http.get(url).send().await {
-                        Err(e) => {
-                             failures.push(format!("{}: {e:?}", path.display()));
-                        }
-                        Ok(resp) => {
-                            if let Err(e) = resp.error_for_status() {
-                                failures.push(format!("{}: {e:?}", path.display()));
-                            }
-                        }
+        let data = fs::read_to_string(path)
+            .await
+            .context(format!("reading {}", path.display()))?;
+        for url in matcher.urls(&data) {
+            println!("{url}");
+            match http.get(url).send().await {
+                Err(e) => {
+                    failures.push(format!("{}: {e:?}", path.display()));
+                }
+                Ok(resp) => {
+                    if let Err(e) = resp.error_for_status() {
+                        failures.push(format!("{}: {e:?}", path.display()));
                     }
                 }
             }
         }
-        Ok(failures)
+    }
+    Ok(failures)
 }
 
 #[cfg(test)]
