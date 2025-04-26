@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use tokio::fs;
 
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 pub struct UrlMatcher(Regex);
 
@@ -33,32 +33,56 @@ impl Default for UrlMatcher {
     }
 }
 
+#[derive(PartialEq)]
+pub enum Status {
+    OK,
+    Warning(String),
+    Error(String),
+    Skipped,
+}
+
+pub struct Link {
+    pub url: String,
+    pub status: Status,
+    pub referrer: OsString,
+}
+
 /// # Errors
-pub async fn scan(paths: &[PathBuf]) -> Result<Vec<String>> {
+pub async fn scan(paths: &[PathBuf]) -> Result<Vec<Link>> {
     let matcher = UrlMatcher::new();
     let http = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         .build()?;
-    let mut failures = Vec::new();
+    let mut links = Vec::new();
     for path in paths {
         let data = fs::read_to_string(path)
             .await
             .context(format!("reading {}", path.display()))?;
         for url in matcher.urls(&data) {
-            println!("{url}");
             match http.get(url).send().await {
                 Err(e) => {
-                    failures.push(format!("{}: {e:?}", path.display()));
+                    links.push(Link {
+                        url: url.to_string(),
+                        status: Status::Error(e.to_string()),
+                        referrer: path.into(),
+                    });
                 }
                 Ok(resp) => {
-                    if let Err(e) = resp.error_for_status() {
-                        failures.push(format!("{}: {e:?}", path.display()));
-                    }
+                    let status = if let Err(e) = resp.error_for_status() {
+                        Status::Error(e.to_string())
+                    } else {
+                        Status::OK
+                    };
+                    links.push(Link {
+                        url: url.to_string(),
+                        status,
+                        referrer: path.into(),
+                    });
                 }
             }
         }
     }
-    Ok(failures)
+    Ok(links)
 }
 
 #[cfg(test)]
