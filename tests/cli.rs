@@ -9,7 +9,7 @@ fn binary_with_no_args_prints_usage() {
     Command::cargo_bin("grink")
         .unwrap()
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains("Usage"));
 }
 
@@ -30,5 +30,8 @@ fn binary_checks_urls_in_file() {
         .args([haystack])
         .assert()
         .success()
-        .stdout(predicate::str::contains(addr));
+        .stdout(predicate::str::contains(addr))
+        .stdout(predicate::str::contains(
+            "Links: 1 (0 OK, 1 errors, 0 warnings)",
+        ));
 }

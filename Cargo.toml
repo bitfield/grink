@@ -1,6 +1,6 @@
 [package]
 name = "grink"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["John Arundel <john@bitfieldconsulting.com>"]
 edition = "2021"
 description = """
@@ -21,9 +21,10 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 anyhow = "1.0.86"
-rayon = "1.10.0"
+clap = { version = "4.5.23", features = ["derive"] }
 regex = "1.10.5"
-reqwest = { version = "0.12.5", features = ["blocking"] }
+reqwest = "0.12.5"
+tokio = { version = "1.44.2", features = ["fs", "macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.14"

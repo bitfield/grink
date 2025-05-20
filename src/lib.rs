@@ -1,32 +1,95 @@
+#![doc = include_str!("../README.md")]
+use anyhow::{Context, Result};
 use regex::Regex;
+use tokio::fs;
 
-pub struct UrlMatcher(Regex);
+use std::{ffi::OsString, fmt::Display, iter, path::PathBuf, sync::LazyLock};
 
-impl UrlMatcher {
-    #[must_use]
-    /// Constructs a new `UrlMatcher`.
-    ///
-    /// # Panics
-    ///
-    /// * If the regex pattern is invalid
-    pub fn new() -> Self {
-        Self(
-            Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-]+")
-                .expect("pattern should be valid"),
-        )
-    }
+static URLS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-]+").expect("pattern should be valid")
+});
 
-    /// Extracts all the URLs from `haystack`.
-    #[must_use]
-    pub fn urls<'h>(&self, haystack: &'h str) -> Vec<&'h str> {
-        self.0.find_iter(haystack).map(|m| m.as_str()).collect()
+#[derive(PartialEq)]
+pub enum Status {
+    OK,
+    Warning(String),
+    Error(String),
+    Skipped,
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Status::OK => write!(f, "[OK]"),
+            Status::Warning(msg) => write!(f, "[WARN] ({})", msg.clone()),
+            Status::Error(msg) => write!(f, "[ERROR] ({})", msg.clone()),
+            Status::Skipped => write!(f, ""),
+        }
     }
 }
 
-impl Default for UrlMatcher {
-    fn default() -> Self {
-        Self::new()
+pub struct Link {
+    pub url: String,
+    pub status: Status,
+    pub referrer: OsString,
+}
+
+impl Display for Link {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {} - referrer: {}",
+            self.status,
+            self.url,
+            self.referrer.display()
+        )
     }
+}
+
+/// Scans all the files in `paths` for HTTP URLs, and fetches each URL to check its status.
+///
+/// # Errors
+///
+/// Returns errors from building the `reqwest` client, or reading the named files.
+pub async fn scan(paths: &[PathBuf]) -> Result<Vec<Link>> {
+    let http = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        .build()?;
+    let mut links = Vec::new();
+    for path in paths {
+        let data = fs::read_to_string(path)
+            .await
+            .context(format!("reading {}", path.display()))?;
+        for url in find_urls(&data) {
+            match http.get(url).send().await {
+                Err(e) => {
+                    links.push(Link {
+                        url: url.to_string(),
+                        status: Status::Error(e.to_string()),
+                        referrer: path.into(),
+                    });
+                }
+                Ok(resp) => {
+                    let status = if let Err(e) = resp.error_for_status() {
+                        Status::Error(e.to_string())
+                    } else {
+                        Status::OK
+                    };
+                    links.push(Link {
+                        url: url.to_string(),
+                        status,
+                        referrer: path.into(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(links)
+}
+
+/// Searches `haystack` and returns an iterator of the URLs found within.
+fn find_urls(haystack: &str) -> iter::Map<regex::Matches, fn(regex::Match<'_>) -> &str> {
+    URLS.find_iter(haystack).map(|m| m.as_str())
 }
 
 #[cfg(test)]
@@ -34,7 +97,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn urls_correctly_extracts_valid_urls() {
+    fn find_urls_fn_correctly_extracts_valid_urls() {
         struct Case {
             input: &'static str,
             want: Vec<&'static str>,
@@ -100,9 +163,8 @@ mod tests {
                 ],
             },
         ];
-        let matcher = UrlMatcher::new();
         for case in cases {
-            let got = matcher.urls(case.input);
+            let got: Vec<_> = find_urls(case.input).collect();
             assert_eq!(case.want, got, "{}", case.input);
         }
     }
