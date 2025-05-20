@@ -24,16 +24,17 @@ async fn main() -> Result<()> {
             Status::OK => ok += 1,
             Status::Warning(_) => warnings += 1,
             Status::Error(_) => errors += 1,
-            _ => {},
+            Status::Skipped => {}
         }
         match link.status {
-            Status::OK if args.debug => println!("[OK] {} - referrer: {:?}", link.url, link.referrer),
-            Status::Warning(msg) if args.debug => println!("[WARN] {} ({}) - referrer: {:?}", link.url, msg, link.referrer),
-            Status::Error(msg) => println!("[WARN] {} ({}) - referrer: {:?}", link.url, msg, link.referrer),
-            Status::Skipped if args.debug => println!("[SKIP] {} - referrer: {:?}", link.url, link.referrer),
-            _ => {},
+            Status::Error(_) => println!("{link}"),
+            Status::OK | Status::Warning(_) | Status::Skipped if args.debug => println!("{link}"),
+            Status::OK | Status::Warning(_) | Status::Skipped => {},
         }
     }
-    println!("Links: {} ({ok} OK, {errors} errors, {warnings} warnings)", ok + warnings + errors);
+    println!(
+        "Links: {} ({ok} OK, {errors} errors, {warnings} warnings)",
+        ok + warnings + errors
+    );
     Ok(())
 }

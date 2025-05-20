@@ -21,6 +21,8 @@ Grink reads all the files you specify, extracts anything that looks like a URL, 
 ```sh
 grink book/*.md
 ```
-```
-book/chapter1.md: HTTP status server error (500 Internal Server Error) for url (https://example.com/bogus)
+
+```txt
+[ERROR] (HTTP status client error (404 Not Found) for url (https://example.com/bogus)) https://example.com/bogus - referrer: book/chapter1.md
+Links: 8 (7 OK, 1 errors, 0 warnings)
 ```
