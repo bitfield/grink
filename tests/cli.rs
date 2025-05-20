@@ -31,5 +31,7 @@ fn binary_checks_urls_in_file() {
         .assert()
         .success()
         .stdout(predicate::str::contains(addr))
-        .stdout(predicate::str::contains("Links: 1 (0 OK, 1 errors, 0 warnings)"));
+        .stdout(predicate::str::contains(
+            "Links: 1 (0 OK, 1 errors, 0 warnings)",
+        ));
 }
