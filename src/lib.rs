@@ -47,9 +47,9 @@ impl Display for Link {
 }
 
 /// Scans all the files in `paths` for HTTP URLs, and fetches each URL to check its status.
-/// 
+///
 /// # Errors
-/// 
+///
 /// Returns errors from building the `reqwest` client, or reading the named files.
 pub async fn scan(paths: &[PathBuf]) -> Result<Vec<Link>> {
     let http = reqwest::Client::builder()

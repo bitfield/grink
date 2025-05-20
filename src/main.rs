@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
         match link.status {
             Status::Error(_) => println!("{link}"),
             Status::OK | Status::Warning(_) | Status::Skipped if args.debug => println!("{link}"),
-            Status::OK | Status::Warning(_) | Status::Skipped => {},
+            Status::OK | Status::Warning(_) | Status::Skipped => {}
         }
     }
     println!(
