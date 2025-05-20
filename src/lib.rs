@@ -6,7 +6,7 @@ use tokio::fs;
 use std::{ffi::OsString, fmt::Display, iter, path::PathBuf, sync::LazyLock};
 
 static URLS: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-]+").expect("pattern should be valid")
+    Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-,]+").expect("pattern should be valid")
 });
 
 #[derive(PartialEq)]
@@ -162,6 +162,13 @@ mod tests {
                     "https://web.archive.org/web/20210210210510/http://www.stephenhough.com/writings/selective/problems-playing-piano.php",
                 ],
             },
+            Case {
+                input: "photo by [Fab5669](https://commons.wikimedia.org/wiki/File:Blois_-_ch%C3%A2teau_royal,_aile_Fran%C3%A7ois_Ier,_int%C3%A9rieur_%2861%29.jpg), licensed under [Creative Commons](https://creativecommons.org/licenses/by-sa/4.0/deed.en)",
+                want: vec![
+                    "https://commons.wikimedia.org/wiki/File:Blois_-_ch%C3%A2teau_royal,_aile_Fran%C3%A7ois_Ier,_int%C3%A9rieur_%2861%29.jpg",
+                    "https://creativecommons.org/licenses/by-sa/4.0/deed.en"
+                ]
+            }
         ];
         for case in cases {
             let got: Vec<_> = find_urls(case.input).collect();
