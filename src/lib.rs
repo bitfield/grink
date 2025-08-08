@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use tokio::fs;
 
-use std::{ffi::OsString, fmt::Display, iter, path::PathBuf, sync::LazyLock};
+use std::{ffi::OsString, fmt::Display, path::PathBuf, sync::LazyLock, time::Duration};
 
 static URLS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-,]+").expect("pattern should be valid")
@@ -54,6 +54,7 @@ impl Display for Link {
 pub async fn scan(paths: &[PathBuf]) -> Result<Vec<Link>> {
     let http = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        .timeout(Duration::from_secs(3))
         .build()?;
     let mut links = Vec::new();
     for path in paths {
@@ -63,9 +64,20 @@ pub async fn scan(paths: &[PathBuf]) -> Result<Vec<Link>> {
         for url in find_urls(&data) {
             match http.get(url).send().await {
                 Err(e) => {
+                    let msg = if e.is_timeout() {
+                        "Request timed out".into()
+                    } else if e.is_connect() {
+                        "Connection failed".into()
+                    } else if e.is_redirect() {
+                        "Redirect loop".into()
+                    } else if e.is_request() {
+                        "Invalid request".into()
+                    } else {
+                        e.to_string()
+                    };
                     links.push(Link {
                         url: url.to_string(),
-                        status: Status::Error(e.to_string()),
+                        status: Status::Error(msg),
                         referrer: path.into(),
                     });
                 }
@@ -88,7 +100,7 @@ pub async fn scan(paths: &[PathBuf]) -> Result<Vec<Link>> {
 }
 
 /// Searches `haystack` and returns an iterator of the URLs found within.
-fn find_urls(haystack: &str) -> iter::Map<regex::Matches, fn(regex::Match<'_>) -> &str> {
+fn find_urls(haystack: &str) -> impl Iterator<Item = &str> {
     URLS.find_iter(haystack).map(|m| m.as_str())
 }
 
