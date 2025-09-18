@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
-use anyhow::{Context, Result};
+use anyhow::Result;
+use futures::Stream;
 use regex::Regex;
 use tokio::fs;
 
@@ -46,57 +47,67 @@ impl Display for Link {
     }
 }
 
-/// Scans all the files in `paths` for HTTP URLs, and fetches each URL to check its status.
+/// Scans all the files in `paths` for HTTP URLs, and returns a stream of Link results
+/// as they are checked.
 ///
 /// # Errors
 ///
 /// Returns errors from building the `reqwest` client, or reading the named files.
-pub async fn scan(paths: &[PathBuf]) -> Result<Vec<Link>> {
+pub fn scan(paths: &[PathBuf]) -> Result<impl Stream<Item = Result<Link>> + '_> {
     let http = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         .timeout(Duration::from_secs(3))
         .build()?;
-    let mut links = Vec::new();
-    for path in paths {
-        let data = fs::read_to_string(path)
-            .await
-            .context(format!("reading {}", path.display()))?;
-        for url in find_urls(&data) {
-            match http.get(url).send().await {
+
+    let stream = async_stream::stream! {
+        for path in paths {
+            let data = match fs::read_to_string(path).await {
+                Ok(data) => data,
                 Err(e) => {
-                    let msg = if e.is_timeout() {
-                        "Request timed out".into()
-                    } else if e.is_connect() {
-                        "Connection failed".into()
-                    } else if e.is_redirect() {
-                        "Redirect loop".into()
-                    } else if e.is_request() {
-                        "Invalid request".into()
-                    } else {
-                        e.to_string()
-                    };
-                    links.push(Link {
-                        url: url.to_string(),
-                        status: Status::Error(msg),
-                        referrer: path.into(),
-                    });
+                    yield Err(anyhow::anyhow!("reading {}: {}", path.display(), e));
+                    continue;
                 }
-                Ok(resp) => {
-                    let status = if let Err(e) = resp.error_for_status() {
-                        Status::Error(e.to_string())
-                    } else {
-                        Status::OK
-                    };
-                    links.push(Link {
-                        url: url.to_string(),
-                        status,
-                        referrer: path.into(),
-                    });
-                }
+            };
+
+            for url in find_urls(&data) {
+                let result = match http.get(url).send().await {
+                    Err(e) => {
+                        let msg = if e.is_timeout() {
+                            "Request timed out".into()
+                        } else if e.is_connect() {
+                            "Connection failed".into()
+                        } else if e.is_redirect() {
+                            "Redirect loop".into()
+                        } else if e.is_request() {
+                            "Invalid request".into()
+                        } else {
+                            e.to_string()
+                        };
+                        Ok(Link {
+                            url: url.to_string(),
+                            status: Status::Error(msg),
+                            referrer: path.clone().into(),
+                        })
+                    }
+                    Ok(resp) => {
+                        let status = if let Err(e) = resp.error_for_status() {
+                            Status::Error(e.to_string())
+                        } else {
+                            Status::OK
+                        };
+                        Ok(Link {
+                            url: url.to_string(),
+                            status,
+                            referrer: path.clone().into(),
+                        })
+                    }
+                };
+                yield result;
             }
         }
-    }
-    Ok(links)
+    };
+
+    Ok(stream)
 }
 
 /// Searches `haystack` and returns an iterator of the URLs found within.

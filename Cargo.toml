@@ -21,7 +21,9 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 anyhow = "1.0.86"
+async-stream = "0.3.5"
 clap = { version = "4.5.23", features = ["derive"] }
+futures = "0.3.30"
 regex = "1.10.5"
 reqwest = "0.12.5"
 tokio = { version = "1.44.2", features = ["fs", "macros", "rt-multi-thread"] }
