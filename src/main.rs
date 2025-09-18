@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use futures::StreamExt;
 
 use std::path::PathBuf;
 
@@ -19,7 +20,10 @@ async fn main() -> Result<()> {
     let mut ok = 0;
     let mut warnings = 0;
     let mut errors = 0;
-    for link in scan(&args.paths).await? {
+
+    let mut stream = Box::pin(scan(&args.paths)?);
+    while let Some(link_result) = stream.next().await {
+        let link = link_result?;
         match link.status {
             Status::OK => ok += 1,
             Status::Warning(_) => warnings += 1,
