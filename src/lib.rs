@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
 use anyhow::Result;
-use futures::Stream;
 use regex::Regex;
 use tokio::fs;
+use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, Stream};
 
 use std::{ffi::OsString, fmt::Display, path::PathBuf, sync::LazyLock, time::Duration};
 
@@ -10,13 +11,13 @@ static URLS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-,]+").expect("pattern should be valid")
 });
 
-static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(||
+static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
-    .user_agent(USER_AGENT)
-    .timeout(Duration::from_secs(3))
-    .build()
-    .unwrap()
-);
+        .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(3))
+        .build()
+        .unwrap()
+});
 
 static USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
@@ -63,28 +64,35 @@ impl Display for Link {
 /// # Errors
 ///
 /// Returns errors from building the `reqwest` client, or reading the named files.
-/// 
+///
 /// # Panics
-/// 
+///
 /// If any path is not valid UTF-8.
-pub fn scan(paths: &[PathBuf]) -> Result<impl Stream<Item = Result<Link>> + '_> {
-    let stream = async_stream::stream! {
-        for path in paths {
-            let data = match fs::read_to_string(path).await {
-                Ok(data) => data,
-                Err(e) => {
-                    yield Err(anyhow::anyhow!("reading {}: {}", path.display(), e));
-                    continue;
+pub fn scan(paths: &[PathBuf]) -> impl Stream<Item = Result<Link>> {
+    let (tx, rx) = mpsc::channel(8);
+
+    for path in paths {
+        let path = path.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let res = fs::read_to_string(&path).await;
+            match res {
+                Ok(data) => {
+                    for url in find_urls(&data) {
+                        tx.send(check_url(url, path.to_string_lossy().as_ref()).await)
+                            .await
+                            .unwrap();
+                    }
                 }
-            };
-
-            for url in find_urls(&data) {
-                yield check_url(url, path.to_str().expect("path must be valid UTF-8")).await;
+                Err(e) => tx
+                    .send(Err(anyhow::anyhow!("reading {}: {}", path.display(), e)))
+                    .await
+                    .unwrap(),
             }
-        }
-    };
-
-    Ok(stream)
+        });
+    }
+    drop(tx);
+    ReceiverStream::new(rx)
 }
 
 async fn check_url(url: &str, referrer: &str) -> Result<Link> {

@@ -21,8 +21,8 @@ async fn main() -> Result<()> {
     let mut warnings = 0;
     let mut errors = 0;
 
-    let mut stream = Box::pin(scan(&args.paths)?);
-    while let Some(link_result) = stream.next().await {
+    let mut results = scan(&args.paths);
+    while let Some(link_result) = results.next().await {
         let link = link_result?;
         match link.status {
             Status::OK => ok += 1,
