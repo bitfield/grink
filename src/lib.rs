@@ -10,6 +10,16 @@ static URLS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-,]+").expect("pattern should be valid")
 });
 
+static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(||
+    reqwest::Client::builder()
+    .user_agent(USER_AGENT)
+    .timeout(Duration::from_secs(3))
+    .build()
+    .unwrap()
+);
+
+static USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
 #[derive(PartialEq)]
 pub enum Status {
     OK,
@@ -53,12 +63,11 @@ impl Display for Link {
 /// # Errors
 ///
 /// Returns errors from building the `reqwest` client, or reading the named files.
+/// 
+/// # Panics
+/// 
+/// If any path is not valid UTF-8.
 pub fn scan(paths: &[PathBuf]) -> Result<impl Stream<Item = Result<Link>> + '_> {
-    let http = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-        .timeout(Duration::from_secs(3))
-        .build()?;
-
     let stream = async_stream::stream! {
         for path in paths {
             let data = match fs::read_to_string(path).await {
@@ -70,44 +79,47 @@ pub fn scan(paths: &[PathBuf]) -> Result<impl Stream<Item = Result<Link>> + '_> 
             };
 
             for url in find_urls(&data) {
-                let result = match http.get(url).send().await {
-                    Err(e) => {
-                        let msg = if e.is_timeout() {
-                            "Request timed out".into()
-                        } else if e.is_connect() {
-                            "Connection failed".into()
-                        } else if e.is_redirect() {
-                            "Redirect loop".into()
-                        } else if e.is_request() {
-                            "Invalid request".into()
-                        } else {
-                            e.to_string()
-                        };
-                        Ok(Link {
-                            url: url.to_string(),
-                            status: Status::Error(msg),
-                            referrer: path.clone().into(),
-                        })
-                    }
-                    Ok(resp) => {
-                        let status = if let Err(e) = resp.error_for_status() {
-                            Status::Error(e.to_string())
-                        } else {
-                            Status::OK
-                        };
-                        Ok(Link {
-                            url: url.to_string(),
-                            status,
-                            referrer: path.clone().into(),
-                        })
-                    }
-                };
-                yield result;
+                yield check_url(url, path.to_str().expect("path must be valid UTF-8")).await;
             }
         }
     };
 
     Ok(stream)
+}
+
+async fn check_url(url: &str, referrer: &str) -> Result<Link> {
+    match CLIENT.head(url).send().await {
+        Err(e) => {
+            let msg = if e.is_timeout() {
+                "Request timed out".into()
+            } else if e.is_connect() {
+                "Connection failed".into()
+            } else if e.is_redirect() {
+                "Redirect loop".into()
+            } else if e.is_request() {
+                "Invalid request".into()
+            } else {
+                e.to_string()
+            };
+            Ok(Link {
+                url: url.to_string(),
+                status: Status::Error(msg),
+                referrer: referrer.into(),
+            })
+        }
+        Ok(resp) => {
+            let status = if let Err(e) = resp.error_for_status() {
+                Status::Error(e.to_string())
+            } else {
+                Status::OK
+            };
+            Ok(Link {
+                url: url.to_string(),
+                status,
+                referrer: referrer.into(),
+            })
+        }
+    }
 }
 
 /// Searches `haystack` and returns an iterator of the URLs found within.
