@@ -3,8 +3,17 @@ use anyhow::Result;
 use futures::Stream;
 use regex::Regex;
 use tokio::fs;
+use url::Url;
 
-use std::{ffi::OsString, fmt::Display, path::PathBuf, sync::LazyLock, time::Duration};
+use std::{
+    ffi::OsString,
+    fmt::Display,
+    fs::File,
+    io::{BufRead, BufReader},
+    path::{Path, PathBuf},
+    sync::LazyLock,
+    time::Duration,
+};
 
 static URLS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"https?:\/\/[\w\d.:]+\/?[\w\d./?=#%:!\-,]+").expect("pattern should be valid")
@@ -15,7 +24,7 @@ pub enum Status {
     OK,
     Warning(String),
     Error(String),
-    Skipped,
+    Ignored,
 }
 
 impl Display for Status {
@@ -24,7 +33,7 @@ impl Display for Status {
             Status::OK => write!(f, "[OK]"),
             Status::Warning(msg) => write!(f, "[WARN] ({})", msg.clone()),
             Status::Error(msg) => write!(f, "[ERROR] ({})", msg.clone()),
-            Status::Skipped => write!(f, ""),
+            Status::Ignored => write!(f, ""),
         }
     }
 }
@@ -53,66 +62,96 @@ impl Display for Link {
 /// # Errors
 ///
 /// Returns errors from building the `reqwest` client, or reading the named files.
-pub fn scan(paths: &[PathBuf]) -> Result<impl Stream<Item = Result<Link>> + '_> {
+pub fn scan<'a>(
+    paths: &'a [PathBuf],
+    ignore: &'a [impl AsRef<str>],
+) -> Result<impl Stream<Item = Result<Link>> + 'a> {
     let http = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         .timeout(Duration::from_secs(3))
         .build()?;
-
     let stream = async_stream::stream! {
-        for path in paths {
-            let data = match fs::read_to_string(path).await {
-                Ok(data) => data,
-                Err(e) => {
-                    yield Err(anyhow::anyhow!("reading {}: {}", path.display(), e));
-                    continue;
-                }
-            };
-
-            for url in find_urls(&data) {
-                let result = match http.get(url).send().await {
-                    Err(e) => {
-                        let msg = if e.is_timeout() {
-                            "Request timed out".into()
-                        } else if e.is_connect() {
-                            "Connection failed".into()
-                        } else if e.is_redirect() {
-                            "Redirect loop".into()
-                        } else if e.is_request() {
-                            "Invalid request".into()
-                        } else {
-                            e.to_string()
-                        };
-                        Ok(Link {
-                            url: url.to_string(),
-                            status: Status::Error(msg),
-                            referrer: path.clone().into(),
-                        })
-                    }
-                    Ok(resp) => {
-                        let status = if let Err(e) = resp.error_for_status() {
-                            Status::Error(e.to_string())
-                        } else {
-                            Status::OK
-                        };
-                        Ok(Link {
-                            url: url.to_string(),
-                            status,
-                            referrer: path.clone().into(),
-                        })
-                    }
-                };
-                yield result;
+    for path in paths {
+        let data = match fs::read_to_string(path).await {
+            Ok(data) => data,
+            Err(e) => {
+                yield Err(anyhow::anyhow!("reading {}: {}", path.display(), e));
+                continue;
             }
+        };
+        for raw_url in find_urls(&data) {
+            let Ok(url) = Url::parse(raw_url) else {
+                yield Ok(Link{
+                    url: raw_url.to_string(),
+                    status: Status::Error("invalid URL".into()),
+                    referrer: path.clone().into(),
+                });
+                continue
+            };
+            if let Some(domain) = url.domain() {
+                if ignore.iter().any(|d| d.as_ref() == domain ) {
+                    yield Ok(Link {
+                        url: raw_url.to_string(),
+                        status: Status::Ignored,
+                        referrer: path.clone().into(),
+                    });
+                    continue
+                }
+            }
+            match http.get(raw_url).send().await {
+                Err(e) => {
+                    let msg = if e.is_timeout() {
+                        "Request timed out".into()
+                    } else if e.is_connect() {
+                        "Connection failed".into()
+                    } else if e.is_redirect() {
+                        "Redirect loop".into()
+                    } else if e.is_request() {
+                        "Invalid request".into()
+                    } else {
+                        e.to_string()
+                    };
+                    yield Ok(Link {
+                        url: url.to_string(),
+                        status: Status::Error(msg),
+                        referrer: path.clone().into(),
+                    })
+                }
+                Ok(resp) => {
+                    let status = if let Err(e) = resp.error_for_status() {
+                        Status::Error(e.to_string())
+                    } else {
+                        Status::OK
+                    };
+                    yield Ok(Link {
+                        url: url.to_string(),
+                        status,
+                        referrer: path.clone().into(),
+                    })
+                }
+            }};
         }
     };
-
     Ok(stream)
 }
 
 /// Searches `haystack` and returns an iterator of the URLs found within.
 fn find_urls(haystack: &str) -> impl Iterator<Item = &str> {
     URLS.find_iter(haystack).map(|m| m.as_str())
+}
+
+/// Returns a list of domains from `ignore_file`, one per line.
+///
+/// # Errors
+///
+/// Any errors returned by `fs::read_to_string`.
+pub fn read_ignore_domains(ignore_file: impl AsRef<Path>) -> Result<Vec<String>> {
+    let reader = BufReader::new(File::open(ignore_file)?);
+    let mut lines = Vec::new();
+    for line_res in reader.lines() {
+        lines.push(line_res?);
+    }
+    Ok(lines)
 }
 
 #[cfg(test)]
@@ -197,5 +236,11 @@ mod tests {
             let got: Vec<_> = find_urls(case.input).collect();
             assert_eq!(case.want, got, "{}", case.input);
         }
+    }
+
+    #[test]
+    fn read_ignore_domains_fn_reads_lines_from_file() {
+        let domains = read_ignore_domains("tests/ignore.txt");
+        assert_eq!(domains.unwrap(), ["bogus.com", "bogus2.com"], "wrong lines");
     }
 }

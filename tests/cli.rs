@@ -32,6 +32,31 @@ fn binary_checks_urls_in_file() {
         .success()
         .stdout(predicate::str::contains(addr))
         .stdout(predicate::str::contains(
-            "Links: 1 (0 OK, 1 errors, 0 warnings)",
+            "Links: 1 (0 OK, 1 errors, 0 warnings, 0 ignored)",
+        ));
+}
+
+#[test]
+fn binary_ignores_domains_in_ignore_file() {
+    let tmp = TempDir::new().unwrap();
+    let ignore_file = tmp.path().join("ignore.txt");
+    fs::write(&ignore_file, "bogus.com").unwrap();
+    let haystack = tmp.path().join("haystack.md");
+    fs::write(
+        &haystack,
+        "Test link: [local test server](http://bogus.com/)",
+    )
+    .unwrap();
+    Command::cargo_bin("grink")
+        .unwrap()
+        .args([
+            "--ignore",
+            ignore_file.to_str().unwrap(),
+            haystack.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Links: 1 (0 OK, 0 errors, 0 warnings, 1 ignored)",
         ));
 }

@@ -24,5 +24,25 @@ grink book/*.md
 
 ```txt
 [ERROR] (HTTP status client error (404 Not Found) for url (https://example.com/bogus)) https://example.com/bogus - referrer: book/chapter1.md
-Links: 8 (7 OK, 1 errors, 0 warnings)
+Links: 8 (7 OK, 1 errors, 0 warnings, 0 ignored)
+```
+
+### Ignoring certain domains
+
+If you want Grink to ignore all links to certain domains (for example, because you know that domain always returns a bogus response status), put these domains in a file, one per line, like this:
+
+```txt
+bogus.com
+sketchy.com
+ignoreme.com
+```
+
+Then use the `--ignore` flag to pass that domains file to Grink:
+
+```sh
+grink --ignore domains.txt book/*.md
+```
+
+```txt
+Links: 8 (5 OK, 0 errors, 0 warnings, 3 ignored)
 ```
