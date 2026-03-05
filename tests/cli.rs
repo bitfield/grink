@@ -1,13 +1,12 @@
 use std::{fs, net::TcpListener};
 
-use assert_cmd::Command;
+use assert_cmd::{assert::OutputAssertExt, cargo, Command};
 use predicates::prelude::*;
 use tempfile::TempDir;
 
 #[test]
 fn binary_with_no_args_prints_usage() {
-    Command::cargo_bin("grink")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("grink"))
         .assert()
         .failure()
         .stderr(predicate::str::contains("Usage"));
@@ -25,9 +24,9 @@ fn binary_checks_urls_in_file() {
         format!("Test link: [local test server](http://{addr}/)"),
     )
     .unwrap();
-    Command::cargo_bin("grink")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("grink"))
         .args([haystack])
+        .unwrap()
         .assert()
         .success()
         .stdout(predicate::str::contains(addr))
@@ -47,13 +46,13 @@ fn binary_ignores_domains_in_ignore_file() {
         "Test link: [local test server](http://bogus.com/)",
     )
     .unwrap();
-    Command::cargo_bin("grink")
-        .unwrap()
+    Command::new(cargo::cargo_bin!("grink"))
         .args([
             "--ignore",
             ignore_file.to_str().unwrap(),
             haystack.to_str().unwrap(),
         ])
+        .unwrap()
         .assert()
         .success()
         .stdout(predicate::str::contains(
