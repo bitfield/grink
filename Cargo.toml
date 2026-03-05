@@ -1,6 +1,6 @@
 [package]
 name = "grink"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["John Arundel <john@bitfieldconsulting.com>"]
 edition = "2021"
 description = """
@@ -27,8 +27,9 @@ futures = "0.3.30"
 regex = "1.10.5"
 reqwest = "0.12.5"
 tokio = { version = "1.44.2", features = ["fs", "macros", "rt-multi-thread"] }
+url = "2.5.8"
 
 [dev-dependencies]
-assert_cmd = "2.0.14"
+assert_cmd = "2.1.2"
 predicates = "3.1.0"
 tempfile = "3.10.1"
